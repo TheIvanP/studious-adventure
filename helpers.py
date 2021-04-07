@@ -6,8 +6,9 @@ import black
 
 
 def process_files():
-    # #### Creating list of filepaths to process original event csv data files
-    # In[2]:
+    # Join a set of event data stored in indiual csv file into one output file
+    # for parsing
+
     # checking your current working directory
     print(os.getcwd())
 
@@ -110,7 +111,6 @@ def test_query(query_in: str, session, should_limit=False, limit=5) -> None:
     except Exception as e:
         print(e)
 
-    # print(f"Input Query: {query_in}")
     print("-" * 50)
     print("Input Query: ")
     print(" " * 50)
@@ -119,6 +119,10 @@ def test_query(query_in: str, session, should_limit=False, limit=5) -> None:
     print("Result: ")
     print(" " * 50)
     for row in rows:
+
+        # black was chosen ahead of pandas dataframe for printing
+        # as the format is more compact and better suited for low
+        # numer of rows with textual content.
         print(black.format_str(repr(row), mode=black.Mode()))
     print(" " * 50)
     print("-" * 50)
@@ -172,7 +176,8 @@ def insert_music_library_col(
     #  compose query insert statement
     query_insert = f"INSERT INTO {table_name} ({query_cols_asstring}) "
 
-    #  for each element in query cols create value substitution magics
+    # for each element in query cols create value substitution magics
+    #  to avoid having to match these to the number of columns we're inserting
     subs = ", ".join(["%s" for x in query_cols])
 
     #  compose value insertion query string
@@ -193,20 +198,79 @@ def insert_music_library_col(
         print(e)
 
 
-def create_table(table_name: str, session, table_create_mapper: dict) -> None:
+def create_table(
+    table_name: str,
+    session,
+    table_create_mapper: dict,
+    table_business_statements_mapper: dict,
+) -> None:
     """Compose a query for creating a table based on table name and
     looking up query based on table name in table_name_create_mapper
 
     Args:
-    table_name:str      name of the table to insert. also used for looking up query
-    session:            cassandra session
-    table_create_mapper:dict with names of tables to insert and queries for cols and primary keys
+    table_name:str          name of the table to insert. also used for looking up query
+    session:                cassandra session
+    table_create_mapper:    dict with names of tables to insert and queries for cols and primary keys
+    query_statement:str     (optional) - query business requirement
     """
-
+    print("-" * 50)
     query = (
         f"CREATE TABLE IF NOT EXISTS {table_name} {table_create_mapper.get(table_name)}"
     )
+
+    print(f"Query business requirement :")
+    print(f"{table_business_statements_mapper.get(table_name)}")
+    print("    ")
+    print(f"Query for creating tables of {table_name} :")
+    print("    ")
+    print(query)
+    print("    ")
+
     try:
         session.execute(query)
     except Exception as e:
         print(e)
+
+
+def drop_table(table_name: str, session) -> None:
+    """Drop a table  from cassandra
+
+    Args:
+    table_name:str  name of the table to drop
+    session:        cassandra session
+    """
+
+    query = f"drop table {table_name}"
+    try:
+        # do we have to assign here?
+        rows = session.execute(query)
+    except Exception as e:
+        print(e)
+
+
+def dict_to_insert_string(dict_in: dict, sep=", ") -> str:
+    """Convert dict to sepearated string
+
+    Args:
+    dict_in:dict        pair of strings in dict
+    sep:dict:optional   separator in string
+    """
+    try:
+        vals = [[k, v] for k, v in dict_in.items()]
+        vals = [" ".join(x) for x in vals]
+        vals = sep.join(vals)
+    except Exception as e:
+        print(e)
+
+    return vals
+
+
+def construct_create_table_query(insert_pairs: str, primary_key: str) -> str:
+    """Construct query for creating a table
+
+    Args:
+    insert_pairs:str    string with colname type
+    primary_key_str     primary key
+    """
+    insert_query = f"({insert_pairs}, PRIMARY KEY ({primary_key}))"
+    return insert_query

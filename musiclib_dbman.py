@@ -2,12 +2,18 @@ import pandas as pd
 from cassandra.cluster import Cluster
 
 from helpers import (
+    construct_create_table_query,
+    dict_to_insert_string,
     drop_table,
     insert_music_library_col,
     process_files,
     test_query,
     create_table,
 )
+
+# ------------- globals ---------------------
+FILE = "event_datafile_new.csv"
+
 
 # ----------- process csv files ----------------------------------
 process_files()
@@ -17,7 +23,7 @@ process_files()
 # instantiate cassandra cluster object
 cluster = Cluster()
 
-# create a session by connecting to it. assuming localhost connection
+# create a session. assuming localhost connection
 try:
     session = cluster.connect()
 except Exception as e:
@@ -43,52 +49,95 @@ except Exception as e:
 #%%
 # ----------- create new tables based on queries ---------------------
 
-# ### Now we need to create tables to run the following queries. Remember, with Apache Cassandra you model the database tables on the queries you want to run.
-# ## Create queries to ask the following three questions of the data
 
-# ### Drop table before creating if if it exists
+#  ---------- Query 1 -------------------
+query_statement_1 = """Give me the artist, song title and song's length in the music app history
+                    that was heard during  sessionId = 338, and itemInSession  = 4"""
 table_q1 = "music_library_q1"
+q1_cols = {
+    "artist": "text",
+    "song": "text",
+    "item_in_session": "int",
+    "length": "float",
+    "session_id": "int",
+}
+q1_primary_key = "session_id, item_in_session"
+
+q1_create_table_query = construct_create_table_query(
+    dict_to_insert_string(q1_cols), primary_key=q1_primary_key
+)
+
+#  ---------- Query 2 -------------------
+query_statement_2 = """Give me only the following: name of artist, song (sorted by itemInSession) 
+                        and user (first and last name) for userid = 10, sessionid = 182"""
+# Query 2 args:
 table_q2 = "music_library_q2"
+q2_cols = {
+    "artist": "text",
+    "song": "text",
+    "first_name": "text",
+    "last_name": "text",
+    "item_in_session": "int",
+    "length": "float",
+    "level": "text",
+    "location": "text",
+    "session_id": "int",
+    "user_id": "int",
+}
+q2_primary_key = "user_id, session_id, item_in_session"
+
+q2_create_table_query = construct_create_table_query(
+    dict_to_insert_string(q2_cols), primary_key=q2_primary_key
+)
+
+
+#  ---------- Query 3 -------------------
+query_statement_3 = """Give me every user name (first and last) in my music app history
+                    who listened to the song 'All Hands Against His Own"""
+
 table_q3 = "music_library_q3"
-drop_table((table_q1, table_q2, table_q3), session)
+q3_cols = {
+    "song": "text",
+    "first_name": "text",
+    "last_name": "text",
+}
+q3_primary_key = "song, first_name, last_name"
+
+q3_create_table_query = construct_create_table_query(
+    dict_to_insert_string(q3_cols), primary_key=q3_primary_key
+)
+
 #%%
-# ### 1. Give me the artist, song title and song's length in the music app history that was heard during  sessionId = 338, and itemInSession  = 4
-table_create_q1 = """(artist text, song text, item_in_session int, length float, session_id int, 
-                        PRIMARY KEY (session_id, item_in_session))"""
+# --------- Execute insert statement ----------------
 
-# ### 2. Give me only the following: name of artist, song (sorted by itemInSession) and user (first and last name) for userid = 10, sessionid = 182
-table_create_q2 = """(artist text, song text, first_name text, last_name text, item_in_session int, length float, level text, location text, session_id int, user_id int, 
-                        PRIMARY KEY (user_id, session_id, item_in_session))"""
-
-# ### 3. Give me every user name (first and last) in my music app history who listened to the song 'All Hands Against His Own'
-table_create_q3 = """(song text, first_name text, last_name text, 
-                        PRIMARY KEY (song, first_name, last_name))"""
-
+# map table names to queries
 table_create_mapper = dict(
     zip(
         (table_q1, table_q2, table_q3),
-        (table_create_q1, table_create_q2, table_create_q3),
+        (q1_create_table_query, q2_create_table_query, q3_create_table_query),
     )
 )
 
+table_business_statements_mapper = dict(
+    zip(
+        (table_q1, table_q2, table_q3),
+        (query_statement_1, query_statement_1, query_statement_3),
+    )
+)
+
+
+# ### Drop table before creating if if it exists
+[drop_table(table, session) for table in (table_q1, table_q2, table_q3)]
+
+# loop over table names in dict to create tables
 for table_name in table_create_mapper.keys():
-    create_table(table_name, session, table_create_mapper)
+    create_table(
+        table_name, session, table_create_mapper, table_business_statements_mapper
+    )
 #%%
 
-col_map = {
-    "artist": 0,
-    "first_name": 1,
-    "gender": 2,
-    "item_in_session": 3,
-    "last_name": 4,
-    "length": 5,
-    "level": 6,
-    "location": 7,
-    "session_id": 8,
-    "song": 9,
-    "user_id": 10,
-}
-
+#  ---------- INSERT DATA FOR 3 QUERIES INTO DB  ---------------
+# avoid camelCase, use snake_case because python.
 col_name_file_map = {
     "artist": "artist",
     "first_name": "firstName",
@@ -104,34 +153,9 @@ col_name_file_map = {
 }
 
 
-#  ---------- INSERT DATA FOR 3 QUERIES INTO DB  ---------------
-# Query 1 args:
-q1_cols = ("artist", "song", "item_in_session", "length", "session_id")
-q1_table_name = "music_library_q1"
-
-# Query 2 args:
-q2_cols = (
-    "artist",
-    "song",
-    "first_name",
-    "last_name",
-    "item_in_session",
-    "length",
-    "level",
-    "location",
-    "session_id",
-    "user_id",
-)
-q2_table_name = "music_library_q2"
-
-# Query 3 args:
-q3_cols = ("song", "first_name", "last_name")
-q3_table_name = "music_library_q3"
-
 # read csv file with pandas - chunksize provides fixed mem use
 #  pandas will automatically cast dtypes to a suitable format
-file = "event_datafile_new.csv"
-df_songdata_chunks = pd.read_csv(file, chunksize=100000)
+df_songdata_chunks = pd.read_csv(FILE, chunksize=100000)
 
 # loop over the chunks using itertuples to preserve dtypes as described
 # in pandas docs for iterrows
@@ -139,19 +163,13 @@ df_songdata_chunks = pd.read_csv(file, chunksize=100000)
 for chunk in df_songdata_chunks:
     for row in chunk.itertuples(index=False):
         # Query 1
-        insert_music_library_col(
-            row, q1_cols, q1_table_name, session, col_name_file_map
-        )
+        insert_music_library_col(row, q1_cols, table_q1, session, col_name_file_map)
 
         # Query 2
-        insert_music_library_col(
-            row, q2_cols, q2_table_name, session, col_name_file_map
-        )
+        insert_music_library_col(row, q2_cols, table_q2, session, col_name_file_map)
 
         # Query 3
-        insert_music_library_col(
-            row, q3_cols, q3_table_name, session, col_name_file_map
-        )
+        insert_music_library_col(row, q3_cols, table_q3, session, col_name_file_map)
 #%%
 # ------------- test 3 queries - will print to terminal ---------
 test_query_1 = (
@@ -166,24 +184,8 @@ for query in [test_query_1, test_query_2, test_query_3]:
 
 #%%
 # --------------- drop the tables, close session -----------------------
-query = "drop table music_library_q1"
-try:
-    rows = session.execute(query)
-except Exception as e:
-    print(e)
-
-query = "drop table music_library_q2"
-try:
-    rows = session.execute(query)
-except Exception as e:
-    print(e)
-
-query = "drop table music_library_q3"
-try:
-    rows = session.execute(query)
-except Exception as e:
-    print(e)
-
+for table_name in table_create_mapper.keys():
+    drop_table(table_name, session)
 
 #  close session and cluster
 session.shutdown()
