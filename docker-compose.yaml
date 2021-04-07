@@ -1,7 +1,6 @@
 services:
     db:
         build: ./db
-#        restart: always
+        restart: always
         ports: 
           - "9042:9042"
-#        env_file: .env
