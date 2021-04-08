@@ -112,7 +112,7 @@ def test_query(query_in: str, session, should_limit=False, limit=5) -> None:
         print(e)
 
     print("-" * 50)
-    print("Input Query: ")
+    print("Data Validation Query: ")
     print(" " * 50)
     print(query_in)
     print("-" * 50)

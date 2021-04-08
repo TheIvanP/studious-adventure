@@ -33,7 +33,7 @@ except Exception as e:
 try:
     session.execute(
         """
-    CREATE KEYSPACE IF NOT EXISTS udacity 
+    CREATE KEYSPACE IF NOT EXISTS sporkify 
     WITH REPLICATION = 
     { 'class' : 'SimpleStrategy', 'replication_factor' : 1 }"""
     )
@@ -42,7 +42,7 @@ except Exception as e:
 
 # #### Set Keyspace
 try:
-    session.set_keyspace("udacity")
+    session.set_keyspace("sporkify")
 except Exception as e:
     print(e)
 
@@ -51,62 +51,62 @@ except Exception as e:
 
 
 #  ---------- Query 1 -------------------
-query_statement_1 = """Give me the artist, song title and song's length in the music app history
-                    that was heard during  sessionId = 338, and itemInSession  = 4"""
-table_q1 = "music_library_q1"
+table_q1 = "artist_song_length_from_session_id"
 q1_cols = {
+    "session_id": "int",
+    "item_in_session": "int",
     "artist": "text",
     "song": "text",
-    "item_in_session": "int",
     "length": "float",
-    "session_id": "int",
 }
-q1_primary_key = "session_id, item_in_session"
+q1_primary_key = "(session_id, item_in_session)"
+query_statement_1 = f"""Query description for table {table_q1}: 
+    We use composite primary key session_id and item_in_session to to unqiuely identify a song. 
+    We return the data from clustering colums artist, song, and length"""
 
 q1_create_table_query = construct_create_table_query(
     dict_to_insert_string(q1_cols), primary_key=q1_primary_key
 )
 
 #  ---------- Query 2 -------------------
-query_statement_2 = """Give me only the following: name of artist, song (sorted by itemInSession) 
-                        and user (first and last name) for userid = 10, sessionid = 182"""
 # Query 2 args:
-table_q2 = "music_library_q2"
+table_q2 = "song_user_from_sessionid"
 q2_cols = {
+    "user_id": "int",
+    "session_id": "int",
+    "item_in_session": "int",
     "artist": "text",
     "song": "text",
     "first_name": "text",
     "last_name": "text",
-    "item_in_session": "int",
-    "length": "float",
-    "level": "text",
-    "location": "text",
-    "session_id": "int",
-    "user_id": "int",
 }
-q2_primary_key = "user_id, session_id, item_in_session"
+q2_primary_key = "(user_id, session_id), item_in_session"
 
 q2_create_table_query = construct_create_table_query(
     dict_to_insert_string(q2_cols), primary_key=q2_primary_key
 )
+query_statement_2 = f"""Query description for table {table_q2}: 
+    We use composite primary key user_id and session_id to uniquely identify a users listening session
+    and return the name of the artist, song and user first + last name.
+    Clustering column item_in_session is used to sort the results"""
 
 
 #  ---------- Query 3 -------------------
-query_statement_3 = """Give me every user name (first and last) in my music app history
-                    who listened to the song 'All Hands Against His Own"""
-
-table_q3 = "music_library_q3"
+table_q3 = "user_name_from_song_name"
 q3_cols = {
     "song": "text",
+    "user_id": "int",
     "first_name": "text",
     "last_name": "text",
 }
-q3_primary_key = "song, first_name, last_name"
+q3_primary_key = "(song), user_id"
 
 q3_create_table_query = construct_create_table_query(
     dict_to_insert_string(q3_cols), primary_key=q3_primary_key
 )
-
+query_statement_3 = f"""Query description for table {table_q3}: 
+    We use composite primary key song and user_id to uniquely identify a user based on what song
+    she listend to and return the first and last name of the user"""
 #%%
 # --------- Execute insert statement ----------------
 
@@ -172,20 +172,23 @@ for chunk in df_songdata_chunks:
         insert_music_library_col(row, q3_cols, table_q3, session, col_name_file_map)
 #%%
 # ------------- test 3 queries - will print to terminal ---------
+
 test_query_1 = (
-    "SELECT * FROM music_library_q1 WHERE session_id = 338 AND item_in_session = 4"
+    f"SELECT * FROM {table_q1} WHERE session_id = 338 AND item_in_session = 4"
 )
-test_query_2 = "SELECT * FROM music_library_q2 WHERE user_id = 10 AND session_id = 182 ORDER BY item_in_session "
-test_query_3 = "SELECT first_name, last_name FROM music_library_q3 where song = 'All Hands Against His Own'"
+test_query_2 = f"SELECT * FROM {table_q2} WHERE user_id = 10 AND session_id = 182 ORDER BY item_in_session "
+test_query_3 = f"SELECT first_name, last_name FROM {table_q3} where song = 'All Hands Against His Own'"
 
 # run the test queries
 for query in [test_query_1, test_query_2, test_query_3]:
     test_query(query, session)
 
+
 #%%
 # --------------- drop the tables, close session -----------------------
 for table_name in table_create_mapper.keys():
     drop_table(table_name, session)
+
 
 #  close session and cluster
 session.shutdown()
