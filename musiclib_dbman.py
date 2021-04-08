@@ -105,7 +105,7 @@ q3_create_table_query = construct_create_table_query(
     dict_to_insert_string(q3_cols), primary_key=q3_primary_key
 )
 query_statement_3 = f"""Query description for table {table_q3}: 
-    We use composite primary key song and user_id to uniquely identify a user based on what song
+    We use primary key song and clustering column user_id to uniquely identify a user based on what song
     she listend to and return the first and last name of the user"""
 #%%
 # --------- Execute insert statement ----------------
